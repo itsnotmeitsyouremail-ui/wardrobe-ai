@@ -1,4 +1,9 @@
-import { Button } from "@/components/ui/button"
+"use client"
+
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
+import { ArrowLeft } from "lucide-react"
+import Link from "next/link"
 
 const events = [
   { id: "work", name: "Work", icon: "💼", formality: "business_casual" },
@@ -12,36 +17,61 @@ const events = [
 ]
 
 export default function SuggestPage() {
-  return (
-    <div className="container mx-auto max-w-4xl p-8">
-      <h1 className="text-4xl font-bold mb-2">Get Outfit Suggestions</h1>
-      <p className="text-muted-foreground mb-8">
-        Select the type of event you're dressing for
-      </p>
+  const router = useRouter()
+  const [user, setUser] = useState<any>(null)
 
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-        {events.map((event) => (
-          <button
-            key={event.id}
-            className="p-6 border rounded-lg hover:border-primary hover:shadow-lg transition-all text-center group"
-          >
-            <div className="text-4xl mb-3">{event.icon}</div>
-            <h3 className="font-semibold mb-1">{event.name}</h3>
-            <p className="text-xs text-muted-foreground capitalize">
-              {event.formality.replace('_', ' ')}
-            </p>
-          </button>
-        ))}
+  useEffect(() => {
+    const userData = localStorage.getItem("user")
+    if (!userData) {
+      router.push("/login")
+      return
+    }
+    setUser(JSON.parse(userData))
+  }, [router])
+
+  if (!user) return null
+
+  return (
+    <div className="min-h-screen bg-background">
+      {/* Header */}
+      <div className="border-b">
+        <div className="container mx-auto p-4 md:p-6">
+          <Link href="/wardrobe" className="inline-flex items-center text-sm text-muted-foreground hover:text-foreground mb-4">
+            <ArrowLeft className="w-4 h-4 mr-2" />
+            Back to Wardrobe
+          </Link>
+          <h1 className="text-2xl md:text-4xl font-bold mb-2">What's the occasion?</h1>
+          <p className="text-sm md:text-base text-muted-foreground">
+            Select what you're dressing up for today
+          </p>
+        </div>
       </div>
 
-      <div className="mt-12 p-6 bg-muted rounded-lg">
-        <h3 className="font-semibold mb-2">🤖 How it works</h3>
-        <ol className="text-sm text-muted-foreground space-y-1">
-          <li>1. Select your event type above</li>
-          <li>2. AI analyzes your wardrobe for suitable items</li>
-          <li>3. Get 3 complete outfit suggestions with reasoning</li>
-          <li>4. Choose your favorite or get more suggestions</li>
-        </ol>
+      <div className="container mx-auto p-4 md:p-8 max-w-4xl">
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
+          {events.map((event) => (
+            <button
+              key={event.id}
+              className="p-4 md:p-6 border rounded-lg hover:border-primary hover:shadow-lg transition-all text-center group"
+            >
+              <div className="text-3xl md:text-4xl mb-2 md:mb-3">{event.icon}</div>
+              <h3 className="font-semibold text-sm md:text-base mb-1">{event.name}</h3>
+              <p className="text-xs text-muted-foreground capitalize">
+                {event.formality.replace('_', ' ')}
+              </p>
+            </button>
+          ))}
+        </div>
+
+        <div className="mt-8 md:mt-12 p-4 md:p-6 bg-muted rounded-lg">
+          <h3 className="font-semibold mb-2 text-sm md:text-base">🤖 How it works</h3>
+          <ol className="text-xs md:text-sm text-muted-foreground space-y-1">
+            <li>1. Select your event type above</li>
+            <li>2. Get 3 AI-powered outfit combinations</li>
+            <li>3. Choose your favorite for today</li>
+            <li>4. We'll track it to avoid repeating soon</li>
+          </ol>
+        </div>
       </div>
     </div>
   )
