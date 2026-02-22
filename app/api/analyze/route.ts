@@ -16,6 +16,18 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const prompt = 'Analyze this clothing item and return ONLY a JSON object with these fields:\n\n' +
+      '{\n' +
+      '  "type": "shirt | pants | dress | skirt | jacket | coat | shoes | shorts | sweater | hoodie | blazer | suit | other",\n' +
+      '  "subtype": "specific type (e.g., dress_shirt, t-shirt, jeans, sneakers)",\n' +
+      '  "colors": ["primary_color", "secondary_color"],\n' +
+      '  "pattern": "solid | striped | plaid | checkered | floral | polka_dot | other",\n' +
+      '  "season": ["spring", "summer", "fall", "winter"],\n' +
+      '  "formality": "casual | business_casual | formal | athletic",\n' +
+      '  "tags": ["3-5", "descriptive", "keywords"]\n' +
+      '}\n\n' +
+      'Be specific. Use common color names. Return ONLY valid JSON, no other text.'
+
     const response = await anthropic.messages.create({
       model: 'claude-3-5-sonnet-20241022',
       max_tokens: 1024,
@@ -32,22 +44,10 @@ export async function POST(request: NextRequest) {
           },
           {
             type: 'text',
-            text: `Analyze this clothing item and return ONLY a JSON object with these fields:
-
-{
-  "type": "shirt | pants | dress | skirt | jacket | coat | shoes | shorts | sweater | hoodie | blazer | suit | other",
-  "subtype": "specific type (e.g., dress_shirt, t-shirt, jeans, sneakers)",
-  "colors": ["primary_color", "secondary_color"],
-  "pattern": "solid | striped | plaid | checkered | floral | polka_dot | other",
-  "season": ["spring", "summer", "fall", "winter"],
-  "formality": "casual | business_casual | formal | athletic",
-  "tags": ["3-5", "descriptive", "keywords"]
-}
-
-Be specific. Use common color names. Return ONLY valid JSON, no other text.`,
+            text: prompt,
           },
         ],
-      }),
+      }],
     })
 
     const textContent = response.content.find(block => block.type === 'text')
