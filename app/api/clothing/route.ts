@@ -8,13 +8,22 @@ const supabase = createClient(
 
 // Create clothing item
 export async function POST(request: NextRequest) {
+  console.log('[DB] Starting clothing item save')
+  
   try {
     const body = await request.json()
     const { userEmail, imageUrl, analysis } = body
 
+    console.log('[DB] Request data:', {
+      userEmail,
+      imageUrl,
+      analysisType: analysis?.type
+    })
+
     // First, get or create user
     let userId: string
 
+    console.log('[DB] Looking up user:', userEmail)
     const { data: existingUser } = await supabase
       .from('users')
       .select('id')
@@ -22,8 +31,10 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (existingUser) {
+      console.log('[DB] Existing user found:', existingUser.id)
       userId = existingUser.id
     } else {
+      console.log('[DB] Creating new user')
       // Create new user
       const { data: newUser, error: userError } = await supabase
         .from('users')
@@ -31,11 +42,16 @@ export async function POST(request: NextRequest) {
         .select('id')
         .single()
 
-      if (userError) throw userError
+      if (userError) {
+        console.error('[DB] User creation error:', userError)
+        throw userError
+      }
+      console.log('[DB] New user created:', newUser.id)
       userId = newUser.id
     }
 
     // Create clothing item
+    console.log('[DB] Inserting clothing item for user:', userId)
     const { data, error } = await supabase
       .from('clothing_items')
       .insert({
@@ -53,14 +69,19 @@ export async function POST(request: NextRequest) {
       .select()
       .single()
 
-    if (error) throw error
+    if (error) {
+      console.error('[DB] Insert error:', error)
+      throw error
+    }
+
+    console.log('[DB] Clothing item saved successfully:', data.id)
 
     return NextResponse.json({
       success: true,
       item: data,
     })
   } catch (error: any) {
-    console.error('Database error:', error)
+    console.error('[DB] Fatal error:', error)
     return NextResponse.json(
       { error: error.message || 'Failed to save item' },
       { status: 500 }
@@ -70,11 +91,16 @@ export async function POST(request: NextRequest) {
 
 // Get all clothing items for user
 export async function GET(request: NextRequest) {
+  console.log('[DB] Fetching clothing items')
+  
   try {
     const { searchParams } = new URL(request.url)
     const userEmail = searchParams.get('userEmail')
 
+    console.log('[DB] Fetching for user:', userEmail)
+
     if (!userEmail) {
+      console.error('[DB] No userEmail provided')
       return NextResponse.json(
         { error: 'userEmail required' },
         { status: 400 }
@@ -89,11 +115,14 @@ export async function GET(request: NextRequest) {
       .single()
 
     if (!user) {
+      console.log('[DB] User not found, returning empty array')
       return NextResponse.json({
         success: true,
         items: [],
       })
     }
+
+    console.log('[DB] User found:', user.id)
 
     // Get clothing items
     const { data: items, error } = await supabase
@@ -102,14 +131,19 @@ export async function GET(request: NextRequest) {
       .eq('user_id', user.id)
       .order('created_at', { ascending: false })
 
-    if (error) throw error
+    if (error) {
+      console.error('[DB] Fetch error:', error)
+      throw error
+    }
+
+    console.log('[DB] Items fetched:', items?.length || 0)
 
     return NextResponse.json({
       success: true,
       items: items || [],
     })
   } catch (error: any) {
-    console.error('Database error:', error)
+    console.error('[DB] Fatal error:', error)
     return NextResponse.json(
       { error: error.message || 'Failed to fetch items' },
       { status: 500 }
