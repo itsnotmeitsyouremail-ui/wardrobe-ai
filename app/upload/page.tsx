@@ -25,11 +25,79 @@ export default function UploadPage() {
     if (!file) return
 
     setUploading(true)
-    // TODO: Upload to Supabase Storage + Claude analysis
-    setTimeout(() => {
+
+    try {
+      // 1. Upload to Supabase Storage
+      const formData = new FormData()
+      formData.append('file', file)
+      formData.append('userId', user?.email || 'anonymous')
+
+      const uploadRes = await fetch('/api/upload', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!uploadRes.ok) {
+        throw new Error('Upload failed')
+      }
+
+      const { imageUrl } = await uploadRes.json()
+
+      // 2. Convert image to base64 for Claude analysis
+      const reader = new FileReader()
+      reader.readAsDataURL(file)
+      
+      reader.onload = async () => {
+        try {
+          const base64 = reader.result?.toString().split(',')[1]
+
+          // 3. Analyze with Claude
+          const analyzeRes = await fetch('/api/analyze', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ imageBase64: base64 }),
+          })
+
+          if (!analyzeRes.ok) {
+            throw new Error('Analysis failed')
+          }
+
+          const { data: analysis } = await analyzeRes.json()
+
+          // 4. Save to database
+          const saveRes = await fetch('/api/clothing', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              userEmail: user?.email,
+              imageUrl,
+              analysis,
+            }),
+          })
+
+          if (!saveRes.ok) {
+            throw new Error('Failed to save item')
+          }
+
+          // Success!
+          setUploading(false)
+          router.push('/wardrobe')
+        } catch (err) {
+          console.error('Analysis error:', err)
+          setUploading(false)
+          alert('Analysis failed. Please try again.')
+        }
+      }
+
+      reader.onerror = () => {
+        setUploading(false)
+        alert('Failed to read image')
+      }
+    } catch (error) {
+      console.error('Upload error:', error)
       setUploading(false)
-      router.push("/wardrobe")
-    }, 2000)
+      alert('Upload failed. Please try again.')
+    }
   }
 
   if (!user) return null

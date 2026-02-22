@@ -18,10 +18,21 @@ export default function WardrobePage() {
       router.push("/login")
       return
     }
-    setUser(JSON.parse(userData))
+    const parsedUser = JSON.parse(userData)
+    setUser(parsedUser)
     
-    // TODO: Fetch items from Supabase
-    // For now, empty
+    // Fetch items from Supabase
+    const fetchItems = async () => {
+      try {
+        const res = await fetch(`/api/clothing?userEmail=${encodeURIComponent(parsedUser.email)}`)
+        const { items: fetchedItems } = await res.json()
+        setItems(fetchedItems || [])
+      } catch (error) {
+        console.error('Failed to fetch items:', error)
+      }
+    }
+    
+    fetchItems()
   }, [router])
 
   const handleLogout = () => {
@@ -93,10 +104,21 @@ export default function WardrobePage() {
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 md:gap-4">
               {items.map((item) => (
                 <div key={item.id} className="border rounded-lg p-3 md:p-4 hover:shadow-lg transition-shadow">
-                  <div className="aspect-square bg-muted rounded-md mb-3"></div>
-                  <h3 className="font-semibold text-sm md:text-base">{item.type}</h3>
-                  <p className="text-xs md:text-sm text-muted-foreground">
-                    {item.colors.join(', ')}
+                  <div className="aspect-square bg-muted rounded-md mb-3 overflow-hidden">
+                    {item.image_url && (
+                      <img 
+                        src={item.image_url} 
+                        alt={item.type}
+                        className="w-full h-full object-cover"
+                      />
+                    )}
+                  </div>
+                  <h3 className="font-semibold text-sm md:text-base capitalize">{item.type}</h3>
+                  <p className="text-xs md:text-sm text-muted-foreground capitalize">
+                    {item.colors?.join(', ') || 'No colors'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1 capitalize">
+                    {item.formality}
                   </p>
                 </div>
               ))}
