@@ -64,20 +64,46 @@ export default function UploadPage() {
 
           const { data: analysis } = await analyzeRes.json()
 
-          // 4. Save to database
-          const saveRes = await fetch('/api/clothing', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userEmail: user?.email,
-              imageUrl,
-              analysis,
-            }),
-          })
+          console.log('[Upload] Analysis complete:', analysis)
 
-          if (!saveRes.ok) {
-            throw new Error('Failed to save item')
+          // 4. Save each clothing item to database
+          if (!analysis.items || analysis.items.length === 0) {
+            throw new Error('No clothing items detected in the image')
           }
+
+          console.log('[Upload] Saving', analysis.items.length, 'items to database')
+
+          // Save each item individually
+          const savePromises = analysis.items.map((item: any) => 
+            fetch('/api/clothing', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                userEmail: user?.email,
+                imageUrl,
+                analysis: {
+                  name: item.name,
+                  type: item.type,
+                  subtype: item.name, // Use specific name as subtype
+                  colors: item.colors,
+                  pattern: item.pattern,
+                  season: item.season,
+                  formality: item.formality,
+                  tags: item.tags,
+                },
+              }),
+            })
+          )
+
+          const saveResults = await Promise.all(savePromises)
+          
+          const failedSaves = saveResults.filter(res => !res.ok)
+          if (failedSaves.length > 0) {
+            console.error('[Upload] Failed to save some items:', failedSaves.length)
+            throw new Error(`Failed to save ${failedSaves.length} item(s)`)
+          }
+
+          console.log('[Upload] All items saved successfully')
 
           // Success!
           setUploading(false)
@@ -113,7 +139,7 @@ export default function UploadPage() {
           </Link>
           <h1 className="text-2xl md:text-4xl font-bold mb-2">Add Clothing</h1>
           <p className="text-sm md:text-base text-muted-foreground">
-            Upload individual items (shirt, pants, shoes, etc.)
+            Upload a photo - I'll detect all clothing items automatically
           </p>
         </div>
       </div>
@@ -167,11 +193,11 @@ export default function UploadPage() {
         <div className="mt-8 md:mt-12 p-4 md:p-6 bg-muted rounded-lg">
           <h3 className="font-semibold mb-2 text-sm md:text-base">💡 Tips for best results</h3>
           <ul className="text-xs md:text-sm text-muted-foreground space-y-1">
-            <li>• Upload ONE item at a time (shirt, pants, shoes separately)</li>
+            <li>• Upload individual items OR full outfit photos - I'll detect all items automatically</li>
             <li>• Use good lighting (natural light is best)</li>
-            <li>• Lay the item flat or hang it</li>
-            <li>• Ensure the entire item is visible</li>
-            <li>• Avoid cluttered backgrounds</li>
+            <li>• Ensure all items are clearly visible</li>
+            <li>• Works with traditional wear too (kurta, sherwani, saree, etc.)</li>
+            <li>• Avoid cluttered backgrounds for better accuracy</li>
           </ul>
         </div>
       </div>

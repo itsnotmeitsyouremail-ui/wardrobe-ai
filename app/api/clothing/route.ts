@@ -52,20 +52,27 @@ export async function POST(request: NextRequest) {
 
     // Create clothing item
     console.log('[DB] Inserting clothing item for user:', userId)
+    const itemData: any = {
+      user_id: userId,
+      image_url: imageUrl,
+      type: analysis.type,
+      subtype: analysis.subtype,
+      colors: analysis.colors,
+      pattern: analysis.pattern,
+      season: analysis.season,
+      formality: analysis.formality,
+      tags: analysis.tags,
+      clean: true,
+    }
+
+    // Add name field if provided (new format)
+    if (analysis.name) {
+      itemData.name = analysis.name
+    }
+
     const { data, error } = await supabase
       .from('clothing_items')
-      .insert({
-        user_id: userId,
-        image_url: imageUrl,
-        type: analysis.type,
-        subtype: analysis.subtype,
-        colors: analysis.colors,
-        pattern: analysis.pattern,
-        season: analysis.season,
-        formality: analysis.formality,
-        tags: analysis.tags,
-        clean: true,
-      })
+      .insert(itemData)
       .select()
       .single()
 

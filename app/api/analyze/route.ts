@@ -23,17 +23,22 @@ export async function POST(request: NextRequest) {
 
     console.log('[ANALYZE] Calling OpenAI API with model: gpt-4o')
 
-    const prompt = 'Analyze this clothing item and return ONLY a JSON object with these fields:\n\n' +
+    const prompt = 'Analyze this image and extract ALL visible clothing items. If a person is wearing multiple items (shirt, pants, shoes, etc.), list each one separately.\n\n' +
+      'Return ONLY a JSON object with an "items" array:\n\n' +
       '{\n' +
-      '  "type": "shirt | pants | dress | skirt | jacket | coat | shoes | shorts | sweater | hoodie | blazer | suit | other",\n' +
-      '  "subtype": "specific type (e.g., dress_shirt, t-shirt, jeans, sneakers)",\n' +
-      '  "colors": ["primary_color", "secondary_color"],\n' +
-      '  "pattern": "solid | striped | plaid | checkered | floral | polka_dot | other",\n' +
-      '  "season": ["spring", "summer", "fall", "winter"],\n' +
-      '  "formality": "casual | business_casual | formal | athletic",\n' +
-      '  "tags": ["3-5", "descriptive", "keywords"]\n' +
+      '  "items": [\n' +
+      '    {\n' +
+      '      "name": "specific clothing name (e.g., t-shirt, jeans, sneakers, kurta, blazer, dress shirt, polo shirt, half sleeve shirt, full sleeve shirt, formal pants, chinos, loafers, oxford shoes, dress, skirt, shorts, hoodie, sweater, jacket, coat, suit jacket, suit pants, ethnic wear, traditional wear)",\n' +
+      '      "type": "shirt | pants | dress | skirt | jacket | coat | shoes | shorts | sweater | hoodie | blazer | suit | kurta | ethnic | footwear | other",\n' +
+      '      "colors": ["primary_color", "secondary_color"],\n' +
+      '      "pattern": "solid | striped | plaid | checkered | floral | polka_dot | printed | embroidered | other",\n' +
+      '      "season": ["spring", "summer", "fall", "winter"],\n' +
+      '      "formality": "casual | business_casual | formal | athletic | ethnic",\n' +
+      '      "tags": ["descriptive", "keywords", "style"]\n' +
+      '    }\n' +
+      '  ]\n' +
       '}\n\n' +
-      'Be specific. Use common color names. Return ONLY valid JSON, no other text.'
+      'Be very specific with names. Use common terms people would search for. Include cultural clothing terms (kurta, sherwani, saree, etc.). Return ONLY valid JSON, no other text.'
 
     const response = await openai.chat.completions.create({
       model: 'gpt-4o',
@@ -74,6 +79,14 @@ export async function POST(request: NextRequest) {
 
     const analysis = JSON.parse(jsonMatch[0])
     console.log('[ANALYZE] Parsed analysis:', analysis)
+
+    // Ensure items array exists
+    if (!analysis.items || !Array.isArray(analysis.items)) {
+      console.error('[ANALYZE] Invalid response structure - missing items array')
+      throw new Error('Invalid response structure')
+    }
+
+    console.log('[ANALYZE] Found', analysis.items.length, 'clothing items')
 
     return NextResponse.json({
       success: true,
