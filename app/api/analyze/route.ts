@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
-import Anthropic from '@anthropic-ai/sdk'
+import OpenAI from 'openai'
 
-const anthropic = new Anthropic({
-  apiKey: process.env.ANTHROPIC_API_KEY!,
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY!,
 })
 
 export async function POST(request: NextRequest) {
-  console.log('[ANALYZE] Starting Claude Vision analysis')
+  console.log('[ANALYZE] Starting GPT-4o Vision analysis')
   
   try {
     const { imageBase64 } = await request.json()
@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    console.log('[ANALYZE] Calling Claude API with model: claude-3-5-sonnet-20241022')
+    console.log('[ANALYZE] Calling OpenAI API with model: gpt-4o')
 
     const prompt = 'Analyze this clothing item and return ONLY a JSON object with these fields:\n\n' +
       '{\n' +
@@ -35,18 +35,16 @@ export async function POST(request: NextRequest) {
       '}\n\n' +
       'Be specific. Use common color names. Return ONLY valid JSON, no other text.'
 
-    const response = await anthropic.messages.create({
-      model: 'claude-3-5-sonnet-20241022',
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
       max_tokens: 1024,
       messages: [{
         role: 'user',
         content: [
           {
-            type: 'image',
-            source: {
-              type: 'base64',
-              media_type: 'image/jpeg',
-              data: imageBase64,
+            type: 'image_url',
+            image_url: {
+              url: `data:image/jpeg;base64,${imageBase64}`,
             },
           },
           {
@@ -57,21 +55,20 @@ export async function POST(request: NextRequest) {
       }],
     })
 
-    console.log('[ANALYZE] Claude response received')
+    console.log('[ANALYZE] GPT-4o response received')
 
-    const textContent = response.content.find(block => block.type === 'text')
-    if (!textContent || textContent.type !== 'text') {
+    const text = response.choices[0]?.message?.content
+    if (!text) {
       console.error('[ANALYZE] No text content in response')
-      throw new Error('No text response from Claude')
+      throw new Error('No text response from GPT-4o')
     }
 
-    const text = textContent.text
-    console.log('[ANALYZE] Claude raw response:', text)
+    console.log('[ANALYZE] GPT-4o raw response:', text)
 
     const jsonMatch = text.match(/\{[\s\S]*\}/)
     
     if (!jsonMatch) {
-      console.error('[ANALYZE] No JSON found in Claude response')
+      console.error('[ANALYZE] No JSON found in GPT-4o response')
       throw new Error('No JSON found in response')
     }
 
