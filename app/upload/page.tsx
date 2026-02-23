@@ -129,44 +129,78 @@ export default function UploadPage() {
           console.log('[UPLOAD UI] Step 5: ✓ Found', analysis.items.length, 'items to save')
           console.log('[UPLOAD UI] Items:', analysis.items.map((i: any) => i.name || i.type))
 
-          // Step 5.5: Segment each item (remove background for each clothing piece)
-          console.log('[UPLOAD UI] Step 5.5: Segmenting individual items...')
+          // Step 5.5: Detect and crop individual items using GroundingDINO
+          console.log('[UPLOAD UI] Step 5.5: Detecting item locations and cropping...')
+          console.log('[UPLOAD UI] Using GroundingDINO for bounding box detection')
+          
+          const detectRes = await fetch('/api/detect-items', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageBase64: base64,
+              items: analysis.items,
+            }),
+          })
+
+          if (!detectRes.ok) {
+            const errorText = await detectRes.text()
+            console.error('[UPLOAD UI] ✗ FAIL: Item detection failed:', errorText)
+            throw new Error(`Item detection failed: ${errorText}`)
+          }
+
+          const detectData = await detectRes.json()
+          console.log('[UPLOAD UI] Step 5.5: ✓ Items detected and cropped')
+          console.log('[UPLOAD UI] Detected count:', detectData.items.filter((i: any) => i.detected).length)
+
+          // Step 5.6: Remove background from each cropped item
+          console.log('[UPLOAD UI] Step 5.6: Removing backgrounds from cropped items...')
           const segmentedItems = await Promise.all(
-            analysis.items.map(async (item: any, index: number) => {
-              console.log(`[UPLOAD UI] Segmenting item ${index + 1}/${analysis.items.length}: ${item.name}`)
+            detectData.items.map(async (detectedItem: any, index: number) => {
+              const { item, croppedBase64, detected } = detectedItem
+
+              if (!detected || !croppedBase64) {
+                console.warn(`[UPLOAD UI] Item ${index + 1} "${item.name}" not detected, using original`)
+                return { item, segmentedBase64: base64, segmented: false, detected: false }
+              }
+
+              console.log(`[UPLOAD UI] Removing background for item ${index + 1}: ${item.name}`)
               
               try {
                 const segmentRes = await fetch('/api/segment', {
                   method: 'POST',
                   headers: { 'Content-Type': 'application/json' },
                   body: JSON.stringify({
-                    imageBase64: base64,
+                    imageBase64: croppedBase64,
                     itemName: item.name || item.type,
                   }),
                 })
 
                 if (!segmentRes.ok) {
-                  console.warn(`[UPLOAD UI] Segmentation failed for ${item.name}, using original`)
-                  return { item, segmentedBase64: base64, segmented: false }
+                  console.warn(`[UPLOAD UI] Background removal failed for ${item.name}, using cropped`)
+                  return { item, segmentedBase64: croppedBase64, segmented: false, detected: true }
                 }
 
                 const segmentData = await segmentRes.json()
-                console.log(`[UPLOAD UI] ✓ Item ${index + 1} segmented:`, segmentData.segmented ? 'YES' : 'NO')
+                console.log(`[UPLOAD UI] ✓ Item ${index + 1} background removed:`, segmentData.segmented ? 'YES' : 'NO')
                 
                 return {
                   item,
                   segmentedBase64: segmentData.imageBase64,
                   segmented: segmentData.segmented || false,
+                  detected: true,
                 }
               } catch (err) {
-                console.error(`[UPLOAD UI] Segmentation error for ${item.name}:`, err)
-                return { item, segmentedBase64: base64, segmented: false }
+                console.error(`[UPLOAD UI] Background removal error for ${item.name}:`, err)
+                return { item, segmentedBase64: croppedBase64, segmented: false, detected: true }
               }
             })
           )
 
-          console.log('[UPLOAD UI] Step 5.5: ✓ All items segmented')
-          console.log('[UPLOAD UI] Segmented count:', segmentedItems.filter(i => i.segmented).length)
+          console.log('[UPLOAD UI] Step 5.6: ✓ All backgrounds processed')
+          console.log('[UPLOAD UI] Summary:', {
+            detected: segmentedItems.filter((i: any) => i.detected).length,
+            backgroundRemoved: segmentedItems.filter((i: any) => i.segmented).length,
+          })
 
           console.log('[UPLOAD UI] Step 6: Uploading segmented images...')
           
