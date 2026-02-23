@@ -22,19 +22,39 @@ export default function UploadPage() {
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (!file) return
+    if (!file) {
+      console.log('[UPLOAD UI] No file selected')
+      return
+    }
+
+    console.log('[UPLOAD UI] ========== START UPLOAD FLOW ==========')
+    console.log('[UPLOAD UI] File:', {
+      name: file.name,
+      size: file.size,
+      type: file.type
+    })
+    console.log('[UPLOAD UI] User email:', user?.email)
 
     setUploading(true)
 
     try {
       // 1. Upload to Supabase Storage
       // First get the actual user ID from database
+      console.log('[UPLOAD UI] Step 1: Fetching user ID...')
       const userRes = await fetch(`/api/user?email=${encodeURIComponent(user?.email)}`)
-      const { userId: actualUserId } = await userRes.json()
+      
+      if (!userRes.ok) {
+        console.error('[UPLOAD UI] User fetch failed:', userRes.status, userRes.statusText)
+        throw new Error('Failed to get user ID')
+      }
+      
+      const userData = await userRes.json()
+      console.log('[UPLOAD UI] Step 1: ✓ User ID:', userData.userId)
 
+      console.log('[UPLOAD UI] Step 2: Uploading to Supabase Storage...')
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('userId', actualUserId || user?.email || 'anonymous')
+      formData.append('userId', userData.userId || user?.email || 'anonymous')
 
       const uploadRes = await fetch('/api/upload', {
         method: 'POST',
@@ -42,91 +62,144 @@ export default function UploadPage() {
       })
 
       if (!uploadRes.ok) {
+        const errorText = await uploadRes.text()
+        console.error('[UPLOAD UI] Upload failed:', uploadRes.status, errorText)
         throw new Error('Upload failed')
       }
 
-      const { imageUrl } = await uploadRes.json()
+      const uploadData = await uploadRes.json()
+      console.log('[UPLOAD UI] Step 2: ✓ Upload successful')
+      console.log('[UPLOAD UI] Image URL:', uploadData.imageUrl)
 
-      // 2. Convert image to base64 for Claude analysis
+      // 2. Convert image to base64 for OpenAI analysis
+      console.log('[UPLOAD UI] Step 3: Converting image to base64...')
       const reader = new FileReader()
       reader.readAsDataURL(file)
       
       reader.onload = async () => {
         try {
-          const base64 = reader.result?.toString().split(',')[1]
+          const base64Full = reader.result?.toString()
+          console.log('[UPLOAD UI] Step 3: ✓ Base64 conversion complete')
+          console.log('[UPLOAD UI] Base64 length:', base64Full?.length || 0)
+          
+          const base64 = base64Full?.split(',')[1]
+          console.log('[UPLOAD UI] Base64 data (no prefix) length:', base64?.length || 0)
 
-          // 3. Analyze with Claude
+          if (!base64) {
+            console.error('[UPLOAD UI] ✗ FAIL: No base64 data generated')
+            throw new Error('Failed to convert image to base64')
+          }
+
+          // 3. Analyze with OpenAI GPT-4o
+          console.log('[UPLOAD UI] Step 4: Sending to /api/analyze...')
+          const analyzePayload = { imageBase64: base64 }
+          console.log('[UPLOAD UI] Payload size:', JSON.stringify(analyzePayload).length, 'bytes')
+          
           const analyzeRes = await fetch('/api/analyze', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageBase64: base64 }),
+            body: JSON.stringify(analyzePayload),
           })
 
+          console.log('[UPLOAD UI] Analysis response status:', analyzeRes.status, analyzeRes.statusText)
+
           if (!analyzeRes.ok) {
-            throw new Error('Analysis failed')
+            const errorData = await analyzeRes.text()
+            console.error('[UPLOAD UI] ✗ FAIL: Analysis failed')
+            console.error('[UPLOAD UI] Error response:', errorData)
+            throw new Error(`Analysis failed: ${errorData}`)
           }
 
-          const { data: analysis } = await analyzeRes.json()
+          const analyzeData = await analyzeRes.json()
+          console.log('[UPLOAD UI] Step 4: ✓ Analysis complete')
+          console.log('[UPLOAD UI] Analysis response:', analyzeData)
 
-          console.log('[Upload] Analysis complete:', analysis)
+          const analysis = analyzeData.data
+          console.log('[UPLOAD UI] Parsed analysis:', analysis)
 
           // 4. Save each clothing item to database
+          console.log('[UPLOAD UI] Step 5: Validating analysis results...')
+          
           if (!analysis.items || analysis.items.length === 0) {
+            console.error('[UPLOAD UI] ✗ FAIL: No clothing items detected')
+            console.error('[UPLOAD UI] Analysis object:', analysis)
             throw new Error('No clothing items detected in the image')
           }
 
-          console.log('[Upload] Saving', analysis.items.length, 'items to database')
+          console.log('[UPLOAD UI] Step 5: ✓ Found', analysis.items.length, 'items to save')
+          console.log('[UPLOAD UI] Items:', analysis.items.map((i: any) => i.name || i.type))
 
+          console.log('[UPLOAD UI] Step 6: Saving items to database...')
+          
           // Save each item individually
-          const savePromises = analysis.items.map((item: any) => 
-            fetch('/api/clothing', {
+          const savePromises = analysis.items.map((item: any, index: number) => {
+            const itemData = {
+              userEmail: user?.email,
+              imageUrl: uploadData.imageUrl,
+              analysis: {
+                name: item.name,
+                type: item.type,
+                subtype: item.name, // Use specific name as subtype
+                colors: item.colors,
+                pattern: item.pattern,
+                season: item.season,
+                formality: item.formality,
+                tags: item.tags,
+              },
+            }
+            
+            console.log(`[UPLOAD UI] Saving item ${index + 1}/${analysis.items.length}:`, item.name)
+            
+            return fetch('/api/clothing', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                userEmail: user?.email,
-                imageUrl,
-                analysis: {
-                  name: item.name,
-                  type: item.type,
-                  subtype: item.name, // Use specific name as subtype
-                  colors: item.colors,
-                  pattern: item.pattern,
-                  season: item.season,
-                  formality: item.formality,
-                  tags: item.tags,
-                },
-              }),
+              body: JSON.stringify(itemData),
             })
-          )
+          })
 
           const saveResults = await Promise.all(savePromises)
+          console.log('[UPLOAD UI] All save requests completed')
           
           const failedSaves = saveResults.filter(res => !res.ok)
           if (failedSaves.length > 0) {
-            console.error('[Upload] Failed to save some items:', failedSaves.length)
+            console.error('[UPLOAD UI] ✗ FAIL: Some saves failed:', failedSaves.length)
+            for (let i = 0; i < saveResults.length; i++) {
+              if (!saveResults[i].ok) {
+                const errorText = await saveResults[i].text()
+                console.error(`[UPLOAD UI] Item ${i + 1} save failed:`, errorText)
+              }
+            }
             throw new Error(`Failed to save ${failedSaves.length} item(s)`)
           }
 
-          console.log('[Upload] All items saved successfully')
+          console.log('[UPLOAD UI] Step 6: ✓ All items saved successfully')
+          console.log('[UPLOAD UI] ========== UPLOAD COMPLETE ==========')
 
           // Success!
           setUploading(false)
           router.push('/wardrobe')
-        } catch (err) {
-          console.error('Analysis error:', err)
+        } catch (err: any) {
+          console.error('[UPLOAD UI] ========== UPLOAD FAILED ==========')
+          console.error('[UPLOAD UI] Error:', err)
+          console.error('[UPLOAD UI] Error message:', err.message)
+          console.error('[UPLOAD UI] Error stack:', err.stack)
           setUploading(false)
-          alert('Analysis failed. Please try again.')
+          alert(`Analysis failed: ${err.message}`)
         }
       }
 
-      reader.onerror = () => {
+      reader.onerror = (error) => {
+        console.error('[UPLOAD UI] ========== FILE READ FAILED ==========')
+        console.error('[UPLOAD UI] FileReader error:', error)
         setUploading(false)
         alert('Failed to read image')
       }
-    } catch (error) {
-      console.error('Upload error:', error)
+    } catch (error: any) {
+      console.error('[UPLOAD UI] ========== UPLOAD ERROR ==========')
+      console.error('[UPLOAD UI] Error:', error)
+      console.error('[UPLOAD UI] Error message:', error.message)
       setUploading(false)
-      alert('Upload failed. Please try again.')
+      alert(`Upload failed: ${error.message}`)
     }
   }
 

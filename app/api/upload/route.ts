@@ -7,33 +7,47 @@ const supabase = createClient(
 )
 
 export async function POST(request: NextRequest) {
-  console.log('[UPLOAD] Starting upload process')
+  const startTime = Date.now()
+  console.log('[UPLOAD API] ========== START UPLOAD ==========')
+  console.log('[UPLOAD API] Timestamp:', new Date().toISOString())
   
   try {
+    console.log('[UPLOAD API] Step 1: Parsing form data...')
     const formData = await request.formData()
     const file = formData.get('file') as File
     const userId = formData.get('userId') as string
 
-    console.log('[UPLOAD] File received:', {
+    console.log('[UPLOAD API] Step 1: ✓ Form data parsed')
+    console.log('[UPLOAD API] File info:', {
+      exists: !!file,
       name: file?.name,
       size: file?.size,
       type: file?.type,
-      userId
     })
+    console.log('[UPLOAD API] User ID:', userId)
 
     if (!file || !userId) {
-      console.error('[UPLOAD] Missing required fields')
+      console.error('[UPLOAD API] ✗ FAIL: Missing required fields')
+      console.error('[UPLOAD API] File exists:', !!file)
+      console.error('[UPLOAD API] UserId exists:', !!userId)
       return NextResponse.json(
         { error: 'File and userId required' },
         { status: 400 }
       )
     }
 
-    // Upload to Supabase Storage (bucket: wardrobe-ai)
+    console.log('[UPLOAD API] Step 2: Preparing upload...')
     const fileExt = file.name.split('.').pop()
     const fileName = `${userId}/${Date.now()}.${fileExt}`
 
-    console.log('[UPLOAD] Uploading to Supabase bucket: wardrobe-ai, path:', fileName)
+    console.log('[UPLOAD API] Upload details:', {
+      bucket: 'wardrobe-ai',
+      path: fileName,
+      extension: fileExt
+    })
+
+    console.log('[UPLOAD API] Step 3: Uploading to Supabase Storage...')
+    const uploadStart = Date.now()
 
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('wardrobe-ai')
@@ -42,19 +56,33 @@ export async function POST(request: NextRequest) {
         upsert: false,
       })
 
+    const uploadDuration = Date.now() - uploadStart
+
     if (uploadError) {
-      console.error('[UPLOAD] Supabase upload error:', uploadError)
+      console.error('[UPLOAD API] ✗ FAIL: Supabase upload error')
+      console.error('[UPLOAD API] Error details:', {
+        message: uploadError.message,
+        status: uploadError.statusCode,
+        error: uploadError.error,
+        name: uploadError.name
+      })
       throw uploadError
     }
 
-    console.log('[UPLOAD] Upload successful:', uploadData)
+    console.log('[UPLOAD API] Step 3: ✓ Upload successful in', uploadDuration, 'ms')
+    console.log('[UPLOAD API] Upload data:', uploadData)
 
-    // Get public URL
+    console.log('[UPLOAD API] Step 4: Generating public URL...')
     const { data: urlData } = supabase.storage
       .from('wardrobe-ai')
       .getPublicUrl(fileName)
 
-    console.log('[UPLOAD] Public URL generated:', urlData.publicUrl)
+    console.log('[UPLOAD API] Step 4: ✓ Public URL generated')
+    console.log('[UPLOAD API] URL:', urlData.publicUrl)
+
+    const totalDuration = Date.now() - startTime
+    console.log('[UPLOAD API] ========== UPLOAD COMPLETE ==========')
+    console.log('[UPLOAD API] Total duration:', totalDuration, 'ms')
 
     return NextResponse.json({
       success: true,
@@ -62,9 +90,18 @@ export async function POST(request: NextRequest) {
       fileName,
     })
   } catch (error: any) {
-    console.error('[UPLOAD] Fatal error:', error)
+    const totalDuration = Date.now() - startTime
+    console.error('[UPLOAD API] ========== UPLOAD FAILED ==========')
+    console.error('[UPLOAD API] Duration before error:', totalDuration, 'ms')
+    console.error('[UPLOAD API] Error type:', error.constructor.name)
+    console.error('[UPLOAD API] Error message:', error.message)
+    console.error('[UPLOAD API] Error details:', error)
+    
     return NextResponse.json(
-      { error: error.message || 'Upload failed' },
+      { 
+        error: error.message || 'Upload failed',
+        details: error.toString()
+      },
       { status: 500 }
     )
   }

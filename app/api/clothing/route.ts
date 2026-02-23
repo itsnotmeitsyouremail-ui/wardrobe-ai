@@ -8,34 +8,46 @@ const supabase = createClient(
 
 // Create clothing item
 export async function POST(request: NextRequest) {
-  console.log('[DB] Starting clothing item save')
+  const startTime = Date.now()
+  console.log('[DB API] ========== START SAVE ITEM ==========')
+  console.log('[DB API] Timestamp:', new Date().toISOString())
   
   try {
+    console.log('[DB API] Step 1: Parsing request body...')
     const body = await request.json()
     const { userEmail, imageUrl, analysis } = body
 
-    console.log('[DB] Request data:', {
+    console.log('[DB API] Step 1: ✓ Body parsed')
+    console.log('[DB API] Request data:', {
       userEmail,
       imageUrl,
-      analysisType: analysis?.type
+      analysisKeys: Object.keys(analysis || {})
     })
+    console.log('[DB API] Analysis details:', analysis)
 
     // First, get or create user
     let userId: string
 
-    console.log('[DB] Looking up user:', userEmail)
-    const { data: existingUser } = await supabase
+    console.log('[DB API] Step 2: Looking up user...')
+    console.log('[DB API] User email:', userEmail)
+    
+    const { data: existingUser, error: lookupError } = await supabase
       .from('users')
       .select('id')
       .eq('email', userEmail)
       .single()
 
+    if (lookupError && lookupError.code !== 'PGRST116') {
+      console.error('[DB API] ✗ FAIL: User lookup error:', lookupError)
+      throw lookupError
+    }
+
     if (existingUser) {
-      console.log('[DB] Existing user found:', existingUser.id)
+      console.log('[DB API] Step 2: ✓ Existing user found')
+      console.log('[DB API] User ID:', existingUser.id)
       userId = existingUser.id
     } else {
-      console.log('[DB] Creating new user')
-      // Create new user
+      console.log('[DB API] Step 2: User not found, creating...')
       const { data: newUser, error: userError } = await supabase
         .from('users')
         .insert({ email: userEmail })
@@ -43,15 +55,18 @@ export async function POST(request: NextRequest) {
         .single()
 
       if (userError) {
-        console.error('[DB] User creation error:', userError)
+        console.error('[DB API] ✗ FAIL: User creation error:', userError)
         throw userError
       }
-      console.log('[DB] New user created:', newUser.id)
+      console.log('[DB API] Step 2: ✓ New user created')
+      console.log('[DB API] User ID:', newUser.id)
       userId = newUser.id
     }
 
     // Create clothing item
-    console.log('[DB] Inserting clothing item for user:', userId)
+    console.log('[DB API] Step 3: Preparing item data...')
+    console.log('[DB API] User ID for insert:', userId)
+    
     const itemData: any = {
       user_id: userId,
       image_url: imageUrl,
@@ -68,12 +83,20 @@ export async function POST(request: NextRequest) {
     // Add name field if provided (new format)
     if (analysis.name) {
       itemData.name = analysis.name
+      console.log('[DB API] Item name:', analysis.name)
     }
 
     // Add primary color if available
     if (analysis.colors && analysis.colors.length > 0) {
       itemData.color = analysis.colors[0] // Primary color
+      console.log('[DB API] Primary color:', analysis.colors[0])
     }
+
+    console.log('[DB API] Step 3: ✓ Item data prepared')
+    console.log('[DB API] Item data:', itemData)
+
+    console.log('[DB API] Step 4: Inserting into database...')
+    const insertStart = Date.now()
 
     const { data, error } = await supabase
       .from('clothing_items')
@@ -81,21 +104,43 @@ export async function POST(request: NextRequest) {
       .select()
       .single()
 
+    const insertDuration = Date.now() - insertStart
+
     if (error) {
-      console.error('[DB] Insert error:', error)
+      console.error('[DB API] ✗ FAIL: Insert error')
+      console.error('[DB API] Error details:', {
+        message: error.message,
+        code: error.code,
+        details: error.details,
+        hint: error.hint
+      })
       throw error
     }
 
-    console.log('[DB] Clothing item saved successfully:', data.id)
+    console.log('[DB API] Step 4: ✓ Insert successful in', insertDuration, 'ms')
+    console.log('[DB API] Saved item ID:', data.id)
+
+    const totalDuration = Date.now() - startTime
+    console.log('[DB API] ========== SAVE COMPLETE ==========')
+    console.log('[DB API] Total duration:', totalDuration, 'ms')
 
     return NextResponse.json({
       success: true,
       item: data,
     })
   } catch (error: any) {
-    console.error('[DB] Fatal error:', error)
+    const totalDuration = Date.now() - startTime
+    console.error('[DB API] ========== SAVE FAILED ==========')
+    console.error('[DB API] Duration before error:', totalDuration, 'ms')
+    console.error('[DB API] Error type:', error.constructor.name)
+    console.error('[DB API] Error message:', error.message)
+    console.error('[DB API] Error details:', error)
+    
     return NextResponse.json(
-      { error: error.message || 'Failed to save item' },
+      { 
+        error: error.message || 'Failed to save item',
+        details: error.toString()
+      },
       { status: 500 }
     )
   }
