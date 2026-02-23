@@ -44,16 +44,16 @@ export async function POST(request: NextRequest) {
     const apiCallStart = Date.now()
 
     // Build text prompt from all items
-    const textPrompt = items.map((i: any) => i.name || i.type).join('. ') + '.'
+    const textPrompt = items.map((i: any) => i.name || i.type).join(', ')
     console.log('[DETECT ITEMS] Text prompt:', textPrompt)
 
     // Use GroundingDINO for object detection with bounding boxes
     const detection = await replicate.run(
-      "adirik/grounding-dino:5ee03dde3c1084a6347ebab5c3f8c57da803e2c0ad94c766de50ca2e1dcd68f0",
+      "adirik/grounding-dino:efd10a8ddc57ea28773327e881ce95e20cc1d734c589f7dd01d2036921ed78aa",
       {
         input: {
           image: imageDataUrl,
-          text_prompt: textPrompt,
+          query: textPrompt,
           box_threshold: 0.3,
           text_threshold: 0.25,
         }
