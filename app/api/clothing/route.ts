@@ -67,32 +67,34 @@ export async function POST(request: NextRequest) {
     console.log('[DB API] Step 3: Preparing item data...')
     console.log('[DB API] User ID for insert:', userId)
     
+    // Core required fields only
+    // NOTE: 'name' and 'color' fields require running supabase-setup.sql first
     const itemData: any = {
       user_id: userId,
       image_url: imageUrl,
-      type: analysis.type,
-      subtype: analysis.subtype,
-      colors: analysis.colors,
-      pattern: analysis.pattern,
-      season: analysis.season,
-      formality: analysis.formality,
-      tags: analysis.tags,
+      type: analysis.type || 'other',
+      subtype: analysis.subtype || analysis.name || 'unknown',
+      colors: analysis.colors || [],
+      pattern: analysis.pattern || 'solid',
+      season: analysis.season || ['all'],
+      formality: analysis.formality || 'casual',
+      tags: analysis.tags || [],
       clean: true,
     }
 
-    // Add name field if provided (new format)
+    // TODO: Uncomment these lines after running supabase-setup.sql
+    // This adds the 'name' and 'color' columns
+    /*
     if (analysis.name) {
       itemData.name = analysis.name
-      console.log('[DB API] Item name:', analysis.name)
     }
-
-    // Add primary color if available
     if (analysis.colors && analysis.colors.length > 0) {
-      itemData.color = analysis.colors[0] // Primary color
-      console.log('[DB API] Primary color:', analysis.colors[0])
+      itemData.color = analysis.colors[0]
     }
+    */
 
     console.log('[DB API] Step 3: ✓ Item data prepared')
+    console.log('[DB API] ⚠️  WARNING: name/color fields disabled until you run supabase-setup.sql')
     console.log('[DB API] Item data:', itemData)
 
     console.log('[DB API] Step 4: Inserting into database...')
