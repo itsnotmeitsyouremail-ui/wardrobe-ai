@@ -129,26 +129,116 @@ export default function UploadPage() {
           console.log('[UPLOAD UI] Step 5: ✓ Found', analysis.items.length, 'items to save')
           console.log('[UPLOAD UI] Items:', analysis.items.map((i: any) => i.name || i.type))
 
-          console.log('[UPLOAD UI] Step 6: Saving items to database...')
+          // Step 5.5: Segment each item (remove background for each clothing piece)
+          console.log('[UPLOAD UI] Step 5.5: Segmenting individual items...')
+          const segmentedItems = await Promise.all(
+            analysis.items.map(async (item: any, index: number) => {
+              console.log(`[UPLOAD UI] Segmenting item ${index + 1}/${analysis.items.length}: ${item.name}`)
+              
+              try {
+                const segmentRes = await fetch('/api/segment', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    imageBase64: base64,
+                    itemName: item.name || item.type,
+                  }),
+                })
+
+                if (!segmentRes.ok) {
+                  console.warn(`[UPLOAD UI] Segmentation failed for ${item.name}, using original`)
+                  return { item, segmentedBase64: base64, segmented: false }
+                }
+
+                const segmentData = await segmentRes.json()
+                console.log(`[UPLOAD UI] ✓ Item ${index + 1} segmented:`, segmentData.segmented ? 'YES' : 'NO')
+                
+                return {
+                  item,
+                  segmentedBase64: segmentData.imageBase64,
+                  segmented: segmentData.segmented || false,
+                }
+              } catch (err) {
+                console.error(`[UPLOAD UI] Segmentation error for ${item.name}:`, err)
+                return { item, segmentedBase64: base64, segmented: false }
+              }
+            })
+          )
+
+          console.log('[UPLOAD UI] Step 5.5: ✓ All items segmented')
+          console.log('[UPLOAD UI] Segmented count:', segmentedItems.filter(i => i.segmented).length)
+
+          console.log('[UPLOAD UI] Step 6: Uploading segmented images...')
           
-          // Save each item individually
-          const savePromises = analysis.items.map((item: any, index: number) => {
+          // Upload each segmented image to storage
+          const uploadPromises = segmentedItems.map(async ({ item, segmentedBase64, segmented }, index) => {
+            console.log(`[UPLOAD UI] Uploading item ${index + 1}/${segmentedItems.length}:`, item.name)
+            
+            // Convert segmented base64 back to blob for upload
+            const byteString = atob(segmentedBase64)
+            const ab = new ArrayBuffer(byteString.length)
+            const ia = new Uint8Array(ab)
+            for (let i = 0; i < byteString.length; i++) {
+              ia[i] = byteString.charCodeAt(i)
+            }
+            const blob = new Blob([ab], { type: segmented ? 'image/png' : 'image/jpeg' })
+            
+            // Create unique filename for this item
+            const timestamp = Date.now()
+            const itemSlug = (item.name || item.type).toLowerCase().replace(/\s+/g, '-')
+            const ext = segmented ? 'png' : 'jpg'
+            const itemFile = new File([blob], `${itemSlug}-${timestamp}.${ext}`, {
+              type: segmented ? 'image/png' : 'image/jpeg'
+            })
+
+            // Upload this specific item image
+            const itemFormData = new FormData()
+            itemFormData.append('file', itemFile)
+            itemFormData.append('userId', userData.userId)
+
+            const itemUploadRes = await fetch('/api/upload', {
+              method: 'POST',
+              body: itemFormData,
+            })
+
+            if (!itemUploadRes.ok) {
+              console.error(`[UPLOAD UI] Upload failed for ${item.name}`)
+              throw new Error(`Failed to upload ${item.name}`)
+            }
+
+            const itemUploadData = await itemUploadRes.json()
+            console.log(`[UPLOAD UI] ✓ Item ${index + 1} uploaded:`, itemUploadData.imageUrl)
+
+            return {
+              item,
+              imageUrl: itemUploadData.imageUrl,
+              segmented,
+            }
+          })
+
+          const uploadedItems = await Promise.all(uploadPromises)
+          console.log('[UPLOAD UI] Step 6: ✓ All segmented images uploaded')
+
+          console.log('[UPLOAD UI] Step 7: Saving items to database...')
+          
+          // Save each item with its own image URL
+          const savePromises = uploadedItems.map((uploaded, index) => {
             const itemData = {
               userEmail: user?.email,
-              imageUrl: uploadData.imageUrl,
+              imageUrl: uploaded.imageUrl,
               analysis: {
-                name: item.name,
-                type: item.type,
-                subtype: item.name, // Use specific name as subtype
-                colors: item.colors,
-                pattern: item.pattern,
-                season: item.season,
-                formality: item.formality,
-                tags: item.tags,
+                name: uploaded.item.name,
+                type: uploaded.item.type,
+                subtype: uploaded.item.name, // Use specific name as subtype
+                colors: uploaded.item.colors,
+                pattern: uploaded.item.pattern,
+                season: uploaded.item.season,
+                formality: uploaded.item.formality,
+                tags: uploaded.item.tags,
               },
             }
             
-            console.log(`[UPLOAD UI] Saving item ${index + 1}/${analysis.items.length}:`, item.name)
+            console.log(`[UPLOAD UI] Saving item ${index + 1}/${uploadedItems.length}:`, uploaded.item.name)
             
             return fetch('/api/clothing', {
               method: 'POST',
@@ -172,7 +262,12 @@ export default function UploadPage() {
             throw new Error(`Failed to save ${failedSaves.length} item(s)`)
           }
 
-          console.log('[UPLOAD UI] Step 6: ✓ All items saved successfully')
+          console.log('[UPLOAD UI] Step 7: ✓ All items saved successfully')
+          console.log('[UPLOAD UI] Summary:', {
+            totalItems: uploadedItems.length,
+            segmented: uploadedItems.filter(i => i.segmented).length,
+            original: uploadedItems.filter(i => !i.segmented).length,
+          })
           console.log('[UPLOAD UI] ========== UPLOAD COMPLETE ==========')
 
           // Success!
