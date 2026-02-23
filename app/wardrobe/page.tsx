@@ -108,15 +108,26 @@ export default function WardrobePage() {
                     {item.image_url && (
                       <img 
                         src={item.image_url} 
-                        alt={item.type}
+                        alt={item.name || item.type}
                         className="w-full h-full object-cover"
                       />
                     )}
                   </div>
-                  <h3 className="font-semibold text-sm md:text-base capitalize">{item.type}</h3>
-                  <p className="text-xs md:text-sm text-muted-foreground capitalize">
-                    {item.colors?.join(', ') || 'No colors'}
-                  </p>
+                  <h3 className="font-semibold text-sm md:text-base capitalize">
+                    {item.name || item.subtype || item.type}
+                  </h3>
+                  <div className="flex items-center gap-2 mt-1">
+                    {item.color && (
+                      <div 
+                        className="w-4 h-4 rounded-full border"
+                        style={{ backgroundColor: item.color }}
+                        title={item.color}
+                      />
+                    )}
+                    <p className="text-xs md:text-sm text-muted-foreground capitalize">
+                      {item.colors?.join(', ') || item.color || 'No color'}
+                    </p>
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1 capitalize">
                     {item.formality}
                   </p>

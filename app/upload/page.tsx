@@ -28,9 +28,13 @@ export default function UploadPage() {
 
     try {
       // 1. Upload to Supabase Storage
+      // First get the actual user ID from database
+      const userRes = await fetch(`/api/user?email=${encodeURIComponent(user?.email)}`)
+      const { userId: actualUserId } = await userRes.json()
+
       const formData = new FormData()
       formData.append('file', file)
-      formData.append('userId', user?.email || 'anonymous')
+      formData.append('userId', actualUserId || user?.email || 'anonymous')
 
       const uploadRes = await fetch('/api/upload', {
         method: 'POST',

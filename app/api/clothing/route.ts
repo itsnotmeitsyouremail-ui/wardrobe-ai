@@ -70,6 +70,11 @@ export async function POST(request: NextRequest) {
       itemData.name = analysis.name
     }
 
+    // Add primary color if available
+    if (analysis.colors && analysis.colors.length > 0) {
+      itemData.color = analysis.colors[0] // Primary color
+    }
+
     const { data, error } = await supabase
       .from('clothing_items')
       .insert(itemData)
