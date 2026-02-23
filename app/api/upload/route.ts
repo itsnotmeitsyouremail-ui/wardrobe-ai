@@ -62,10 +62,10 @@ export async function POST(request: NextRequest) {
       console.error('[UPLOAD API] ✗ FAIL: Supabase upload error')
       console.error('[UPLOAD API] Error details:', {
         message: uploadError.message,
-        status: uploadError.statusCode,
-        error: uploadError.error,
+        statusCode: uploadError.statusCode,
         name: uploadError.name
       })
+      console.error('[UPLOAD API] Full error object:', uploadError)
       throw uploadError
     }
 
